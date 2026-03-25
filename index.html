@@ -1,143 +1,320 @@
 <!DOCTYPE html>
 <html lang="zh">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>图片下载器（移动优化版）</title>
-
-<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>图片批量下载（直接下载版）</title>
 <style>
-body { font-family: sans-serif; padding: 10px; }
-textarea { width: 100%; height: 120px; font-size: 14px; }
-button { margin: 5px; padding: 10px; font-size: 16px; }
-.item { display: flex; align-items: center; margin: 10px 0; }
-img { width: 70px; height: 70px; object-fit: cover; background: #eee; }
-.status { font-size: 12px; color: #666; margin-left: 10px; }
+  body {
+    font-family: sans-serif;
+    padding: 12px;
+    background: #fff;
+  }
+  h3 {
+    margin: 0 0 12px;
+    font-size: 22px;
+  }
+  textarea {
+    width: 100%;
+    min-height: 140px;
+    font-size: 14px;
+    line-height: 1.4;
+    box-sizing: border-box;
+    padding: 10px;
+    border: 1px solid #bbb;
+    border-radius: 8px;
+    resize: vertical;
+  }
+  .btn-row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin: 12px 0 16px;
+  }
+  button {
+    padding: 12px 16px;
+    font-size: 16px;
+    border: 1px solid #888;
+    border-radius: 8px;
+    background: #f4f4f4;
+    cursor: pointer;
+  }
+  button:active {
+    transform: scale(0.99);
+  }
+  .tip {
+    font-size: 12px;
+    color: #666;
+    margin: 8px 0 12px;
+    line-height: 1.5;
+  }
+  .item {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    margin: 14px 0;
+    padding: 10px;
+    border: 1px solid #e5e5e5;
+    border-radius: 10px;
+  }
+  .thumb {
+    width: 96px;
+    height: 96px;
+    object-fit: cover;
+    background: #eee;
+    border-radius: 8px;
+    flex: 0 0 auto;
+  }
+  .item-info {
+    flex: 1;
+    min-width: 0;
+  }
+  .status {
+    font-size: 13px;
+    color: #666;
+    word-break: break-all;
+    line-height: 1.5;
+  }
+  .actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+  }
+  .actions button {
+    padding: 10px 12px;
+    font-size: 14px;
+  }
+  #log {
+    margin-top: 14px;
+    font-size: 13px;
+    color: #444;
+    line-height: 1.5;
+    word-break: break-all;
+  }
+  .ok { color: #0a7a28; }
+  .fail { color: #c0392b; }
 </style>
 </head>
 <body>
 
-<h3>📥 图片批量下载（移动优化）</h3>
+<h3>图片批量下载（直接下载版）</h3>
 
-<textarea id="input" placeholder="每行一个图片链接"></textarea><br>
+<textarea id="input" placeholder="每行一个图片链接，或直接粘贴一整段链接文本"></textarea>
 
-<button onclick="preview()">解析预览</button>
-<button onclick="downloadZip()">打包下载ZIP</button>
+<div class="btn-row">
+  <button id="previewBtn">解析预览</button>
+  <button id="downloadAllBtn">全部直接下载</button>
+</div>
 
-<div id="list"></div>
+<div class="tip">
+  说明：预览使用图片直链，不走 fetch；下载使用浏览器直链触发。<br>
+  如果某些链接是临时签名链接，过期后就不能下载了。
+</div>
+
+<div id="result-list"></div>
 <div id="log"></div>
 
 <script>
 const input = document.getElementById('input');
-const list = document.getElementById('list');
+const resultList = document.getElementById('result-list');
 const logArea = document.getElementById('log');
+const previewBtn = document.getElementById('previewBtn');
+const downloadAllBtn = document.getElementById('downloadAllBtn');
 
-function log(msg) {
-  logArea.innerHTML = msg + "<br>" + logArea.innerHTML;
+function log(msg, cls = '') {
+  const line = document.createElement('div');
+  if (cls) line.className = cls;
+  line.textContent = msg;
+  logArea.prepend(line);
 }
 
-function getExt(type, url) {
-  if (type.includes('png')) return 'png';
-  if (type.includes('gif')) return 'gif';
-  if (type.includes('webp')) return 'webp';
-  if (type.includes('jpeg')) return 'jpg';
-
-  if (url.endsWith('.png')) return 'png';
-  if (url.endsWith('.gif')) return 'gif';
-  if (url.endsWith('.webp')) return 'webp';
-
-  return 'jpg';
+function sleep(ms) {
+  return new Promise(r => setTimeout(r, ms));
 }
 
-async function fetchImage(url) {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error();
-  return await res.blob();
+function tryDecodeOnce(text) {
+  try {
+    const decoded = decodeURIComponent(text);
+    return decoded;
+  } catch {
+    return text;
+  }
 }
 
-// 限制并发
-async function pool(limit, tasks) {
-  const ret = [];
-  const executing = [];
+function extractUrls(rawText) {
+  let text = (rawText || '').replace(/\r/g, '\n').trim();
+  if (!text) return [];
 
-  for (const task of tasks) {
-    const p = task().then(res => {
-      executing.splice(executing.indexOf(p), 1);
-      return res;
-    });
-    ret.push(p);
-    executing.push(p);
+  const lines = text.split('\n').map(s => s.trim()).filter(Boolean);
 
-    if (executing.length >= limit) {
-      await Promise.race(executing);
+  // 如果只粘贴了一整段编码文本，先尝试解码一次再提取
+  if (lines.length === 1) {
+    const decoded = tryDecodeOnce(lines[0]);
+    if (decoded !== lines[0]) {
+      text = decoded;
     }
   }
 
-  return Promise.all(ret);
+  const tokens = text
+    .split(/\s+/)
+    .map(s => s.trim())
+    .filter(Boolean);
+
+  const urls = [];
+  const seen = new Set();
+
+  for (const token of tokens) {
+    const matches = token.match(/https?:\/\/[^\s<>"'`]+/g);
+    if (matches && matches.length) {
+      for (let u of matches) {
+        // 去掉末尾常见标点
+        u = u.replace(/[),.;]+$/g, '');
+        if (!seen.has(u)) {
+          seen.add(u);
+          urls.push(u);
+        }
+      }
+    } else if (/^https?:\/\//i.test(token)) {
+      const u = token.replace(/[),.;]+$/g, '');
+      if (!seen.has(u)) {
+        seen.add(u);
+        urls.push(u);
+      }
+    }
+  }
+
+  return urls;
 }
 
-async function preview() {
-  list.innerHTML = '';
+function guessExtFromUrl(url) {
+  try {
+    const pathname = new URL(url).pathname.toLowerCase();
+    if (pathname.endsWith('.png')) return 'png';
+    if (pathname.endsWith('.gif')) return 'gif';
+    if (pathname.endsWith('.webp')) return 'webp';
+    if (pathname.endsWith('.jpeg')) return 'jpg';
+    if (pathname.endsWith('.jpg')) return 'jpg';
+    if (pathname.endsWith('.bmp')) return 'bmp';
+    if (pathname.endsWith('.svg')) return 'svg';
+  } catch {}
+  return 'jpg';
+}
 
-  const urls = input.value.split('\n').map(x => x.trim()).filter(Boolean);
+function makeFilename(url, index) {
+  const ext = guessExtFromUrl(url);
+  const n = String(index + 1).padStart(3, '0');
+  return `img_${n}.${ext}`;
+}
 
-  urls.forEach(url => {
-    const div = document.createElement('div');
-    div.className = 'item';
+function directOpen(url) {
+  window.open(url, '_blank', 'noopener,noreferrer');
+}
+
+function directDownload(url, filename) {
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.target = '_blank';
+  a.rel = 'noopener noreferrer';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
+function renderList(urls) {
+  resultList.innerHTML = '';
+
+  if (!urls.length) {
+    log('没有识别到任何 URL', 'fail');
+    return;
+  }
+
+  urls.forEach((url, idx) => {
+    const item = document.createElement('div');
+    item.className = 'item';
 
     const img = document.createElement('img');
+    img.className = 'thumb';
+    img.src = url;
+    img.loading = 'lazy';
+    img.referrerPolicy = 'no-referrer';
+
+    const info = document.createElement('div');
+    info.className = 'item-info';
+
     const status = document.createElement('div');
     status.className = 'status';
     status.textContent = '加载中...';
 
-    div.appendChild(img);
-    div.appendChild(status);
-    list.appendChild(div);
+    img.onload = () => {
+      status.textContent = '预览成功';
+      status.className = 'status ok';
+    };
 
-    fetchImage(url)
-      .then(blob => {
-        const u = URL.createObjectURL(blob);
-        img.src = u;
-        status.textContent = '✔ 成功';
+    img.onerror = () => {
+      status.textContent = '预览失败（可能是链接失效、需要权限，或浏览器不允许直接展示）';
+      status.className = 'status fail';
+    };
 
-        setTimeout(() => URL.revokeObjectURL(u), 5000);
-      })
-      .catch(() => {
-        status.textContent = '❌ 失败';
-      });
+    const actions = document.createElement('div');
+    actions.className = 'actions';
+
+    const openBtn = document.createElement('button');
+    openBtn.textContent = '打开原图';
+    openBtn.onclick = () => directOpen(url);
+
+    const dlBtn = document.createElement('button');
+    dlBtn.textContent = '直接下载';
+    dlBtn.onclick = () => {
+      const name = makeFilename(url, idx);
+      directDownload(url, name);
+      log(`已触发下载：${name}`, 'ok');
+    };
+
+    actions.appendChild(openBtn);
+    actions.appendChild(dlBtn);
+
+    const urlText = document.createElement('div');
+    urlText.className = 'status';
+    urlText.style.marginTop = '8px';
+    urlText.textContent = url;
+
+    info.appendChild(status);
+    info.appendChild(actions);
+    info.appendChild(urlText);
+
+    item.appendChild(img);
+    item.appendChild(info);
+    resultList.appendChild(item);
   });
+
+  log(`已识别 ${urls.length} 个链接`, 'ok');
 }
 
-async function downloadZip() {
-  const urls = input.value.split('\n').map(x => x.trim()).filter(Boolean);
-
-  const zip = new JSZip();
-
-  const tasks = urls.map((url, i) => async () => {
-    try {
-      const blob = await fetchImage(url);
-      const ext = getExt(blob.type, url);
-      zip.file(`img_${i}.${ext}`, blob);
-      log(`✔ ${i}`);
-    } catch {
-      log(`❌ 失败: ${url}`);
-    }
-  });
-
-  await pool(3, tasks); // 并发3个
-
-  const content = await zip.generateAsync({ type: "blob" });
-
-  const a = document.createElement('a');
-  const url = URL.createObjectURL(content);
-
-  a.href = url;
-  a.download = "images.zip";
-  a.click();
-
-  setTimeout(() => URL.revokeObjectURL(url), 5000);
+async function preview() {
+  const urls = extractUrls(input.value);
+  renderList(urls);
 }
+
+async function downloadAll() {
+  const urls = extractUrls(input.value);
+  if (!urls.length) {
+    log('没有可下载的链接', 'fail');
+    return;
+  }
+
+  for (let i = 0; i < urls.length; i++) {
+    const url = urls[i];
+    const name = makeFilename(url, i);
+    directDownload(url, name);
+    log(`已触发：${name}`, 'ok');
+    await sleep(900);
+  }
+}
+
+previewBtn.onclick = preview;
+downloadAllBtn.onclick = downloadAll;
 </script>
 
 </body>
