@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>AI 图片批量下载器</title>
+    <style>
+        :root {
+            --primary-color: #4a90e2;
+            --bg-color: #f5f7fa;
+            --card-bg: #ffffff;
+            --text-color: #333;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        .container {
+            background: var(--card-bg);
+            width: 100%;
+            max-width: 600px;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            box-sizing: border-box;
+        }
+
+        h1 {
+            text-align: center;
+            color: var(--primary-color);
+            margin-top: 0;
+            font-size: 1.5rem;
+        }
+
+        .info-box {
+            background-color: #e8f4fd;
+            border-left: 4px solid var(--primary-color);
+            padding: 10px;
+            margin-bottom: 15px;
+            font-size: 0.9rem;
+            color: #555;
+            border-radius: 4px;
+        }
+
+        label {
+            font-weight: bold;
+            display: block;
+            margin-bottom: 8px;
+        }
+
+        textarea {
+            width: 100%;
+            height: 150px;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 14px;
+            box-sizing: border-box;
+            resize: vertical;
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.2);
+        }
+
+        .btn-group {
+            margin-top: 20px;
+            display: flex;
+            gap: 10px;
+        }
+
+        button {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .btn-start {
+            background-color: var(--primary-color);
+            color: white;
+        }
+
+        .btn-start:hover {
+            background-color: #357abd;
+        }
+
+        .btn-start:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+
+        .btn-clear {
+            background-color: #e0e0e0;
+            color: #333;
+            flex: 0.4;
+        }
+
+        #log-area {
+            margin-top: 20px;
+            background: #333;
+            color: #00ff00;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 12px;
+            height: 200px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+
+        .progress-bar {
+            height: 6px;
+            background: #eee;
+            border-radius: 3px;
+            margin-top: 15px;
+            overflow: hidden;
+            display: none;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: var(--primary-color);
+            width: 0%;
+            transition: width 0.3s;
+        }
+
+        /* 安卓特定提示 */
+        .android-note {
+            font-size: 0.8rem;
+            color: #888;
+            text-align: center;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>🖼️ AI 图片批量下载器</h1>
+    
+    <div class="info-box">
+        <strong>💡 使用说明：</strong><br>
+        1. 在下方输入图片链接，每行一个。<br>
+        2. 点击“开始下载”。<br>
+        3. <strong>安卓用户注意：</strong> 首次下载时，浏览器/APP 可能会弹窗询问“是否允许下载多个文件”，请务必点击<strong>“允许”</strong>。文件通常会保存在 <code>Download</code> 文件夹中（受限于安卓安全策略，网页无法直接静默写入特定相册目录，但您可以稍后移动它们）。
+    </div>
+
+    <label for="url-input">输入链接列表:</label>
+    <textarea id="url-input" placeholder="https://storage.googleapis.com/...&#10;https://example.com/image2.jpg"></textarea>
+
+    <div class="progress-bar" id="progress-bar">
+        <div class="progress-fill" id="progress-fill"></div>
+    </div>
+
+    <div class="btn-group">
+        <button class="btn-clear" onclick="clearText()">清空</button>
+        <button class="btn-start" id="start-btn" onclick="startDownload()">开始下载</button>
+    </div>
+
+    <div id="log-area">等待任务...</div>
+    <div class="android-note">打包为 APK 后，请确保在安卓设置中授予“存储/文件”权限。</div>
+</div>
+
+<script>
+    // 日志输出函数
+    function log(message, type = 'info') {
+        const logArea = document.getElementById('log-area');
+        const timestamp = new Date().toLocaleTimeString();
+        const color = type === 'error' ? '#ff6b6b' : (type === 'success' ? '#00ff00' : '#00ff00');
+        
+        const line = document.createElement('div');
+        line.style.color = color;
+        line.textContent = `[${timestamp}] ${message}`;
+        logArea.appendChild(line);
+        logArea.scrollTop = logArea.scrollHeight;
+    }
+
+    function clearText() {
+        document.getElementById('url-input').value = '';
+        document.getElementById('log-area').innerHTML = '已清空';
+        document.getElementById('progress-bar').style.display = 'none';
+        document.getElementById('progress-fill').style.width = '0%';
+    }
+
+    function getFilenameFromUrl(url) {
+        try {
+            const urlObj = new URL(url);
+            let pathname = urlObj.pathname;
+            let filename = pathname.substring(pathname.lastIndexOf('/') + 1);
+            
+            // 处理查询参数中的文件名（某些情况）
+            if (!filename || filename.length < 3) {
+                filename = `image_${Date.now()}.jpg`;
+            }
+            
+            // 简单的解码
+            filename = decodeURIComponent(filename);
+            
+            // 确保有扩展名
+            if (!filename.includes('.')) {
+                filename += '.jpg';
+            }
+            return filename;
+        } catch (e) {
+            return `download_${Date.now()}.jpg`;
+        }
+    }
+
+    async function downloadFile(url, filename) {
+        try {
+            log(`正在请求：${url.substring(0, 50)}...`);
+            
+            // 使用 fetch 获取二进制数据
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: {
+                    // 某些服务器需要 Referer 或 User-Agent，但在浏览器端受限
+                    // 这里主要依赖浏览器的默认行为
+                },
+                mode: 'cors' // 尝试跨域，如果服务器不允许 CORS 可能会失败
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP 错误：${response.status}`);
+            }
+
+            const blob = await response.blob();
+            
+            // 创建临时下载链接
+            const blobUrl = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = blobUrl;
+            a.download = filename;
+            
+            document.body.appendChild(a);
+            a.click();
+            
+            // 清理
+            window.URL.revokeObjectURL(blobUrl);
+            document.body.removeChild(a);
+            
+            log(`✅ 成功触发下载：${filename}`, 'success');
+            return true;
+        } catch (error) {
+            log(`❌ 下载失败：${error.message}`, 'error');
+            // 备用方案：如果 fetch 失败（通常是 CORS 问题），尝试直接打开新标签页让用户手动保存
+            log(`⚠️ 尝试备用方案：在新标签页打开图片...`, 'info');
+            window.open(url, '_blank');
+            return false;
+        }
+    }
+
+    async function startDownload() {
+        const input = document.getElementById('url-input').value;
+        const lines = input.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+        
+        if (lines.length === 0) {
+            alert('请输入至少一个链接！');
+            return;
+        }
+
+        const btn = document.getElementById('start-btn');
+        const progressBar = document.getElementById('progress-bar');
+        const progressFill = document.getElementById('progress-fill');
+        
+        btn.disabled = true;
+        btn.textContent = '下载中...';
+        progressBar.style.display = 'block';
+        log(`开始处理 ${lines.length} 个链接...`);
+
+        let successCount = 0;
+        const total = lines.length;
+
+        for (let i = 0; i < lines.length; i++) {
+            const url = lines[i];
+            const filename = getFilenameFromUrl(url);
+            
+            // 更新进度条
+            const percent = ((i) / total) * 100;
+            progressFill.style.width = `${percent}%`;
+
+            const result = await downloadFile(url, filename);
+            if (result) successCount++;
+
+            // 稍微延时，避免浏览器瞬间弹出太多下载警告被拦截
+            await new Promise(r => setTimeout(r, 800));
+        }
+
+        progressFill.style.width = '100%';
+        btn.disabled = false;
+        btn.textContent = '开始下载';
+        log(`\n🎉 全部完成！成功：${successCount} / 总数：${total}`);
+        alert(`下载任务结束！\n成功：${successCount}\n失败/需手动：${total - successCount}\n\n请检查您的“下载”文件夹或通知栏。`);
+    }
+</script>
+
+</body>
+</html>
