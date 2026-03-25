@@ -4,122 +4,92 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="referrer" content="no-referrer">
-    <title>图片助手 Pro</title>
+    <title>图片助手 v4</title>
     <style>
-        :root { --primary: #5c7cfa; --bg: #f1f3f5; }
-        body { font-family: sans-serif; background: var(--bg); margin: 0; padding: 20px; display: flex; justify-content: center; }
-        .card { background: white; width: 100%; max-width: 500px; padding: 20px; border-radius: 12px; box-shadow: 0 8px 20px rgba(0,0,0,0.08); }
-        h2 { font-size: 1.1rem; text-align: center; color: #333; margin-top: 0; }
-        textarea { width: 100%; height: 120px; border: 1px solid #dee2e6; border-radius: 8px; padding: 10px; box-sizing: border-box; font-family: monospace; font-size: 13px; background: #f8f9fa; }
-        .btn-group { display: grid; grid-template-columns: 0.6fr 1fr 1fr; gap: 8px; margin: 15px 0; }
-        button { padding: 12px 5px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 14px; }
-        .btn-clear { background: #e9ecef; color: #495057; }
-        .btn-preview { background: #748ffc; color: white; }
-        .btn-download { background: var(--primary); color: white; }
-        #preview-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; margin-top: 15px; }
-        .p-item { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 4px; background: #eee; }
-        #log { margin-top: 15px; font-size: 11px; color: #868e96; max-height: 100px; overflow-y: auto; border-top: 1px solid #eee; padding-top: 10px; }
-        .status-tag { display: block; text-align: center; font-size: 12px; color: #fa5252; margin-bottom: 10px; }
+        :root { --primary: #4a90e2; --bg: #f5f7fa; }
+        body { font-family: sans-serif; background: var(--bg); margin: 0; padding: 15px; display: flex; justify-content: center; }
+        .card { background: white; width: 100%; max-width: 500px; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        textarea { width: 100%; height: 100px; border: 1px solid #ddd; border-radius: 8px; padding: 10px; box-sizing: border-box; font-size: 13px; }
+        .btn-group { display: grid; grid-template-columns: 1fr 1.5fr; gap: 10px; margin: 15px 0; }
+        button { padding: 12px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; color: white; }
+        .btn-preview { background: #67809f; }
+        .btn-download { background: var(--primary); }
+        
+        /* 预览与手动下载列表 */
+        #result-list { margin-top: 15px; }
+        .item { display: flex; align-items: center; background: #f8f9fa; padding: 10px; border-radius: 8px; margin-bottom: 8px; border: 1px solid #eee; }
+        .item img { width: 60px; height: 60px; object-fit: cover; border-radius: 4px; margin-right: 12px; background: #ddd; }
+        .item-info { flex: 1; overflow: hidden; }
+        .item-info div { font-size: 12px; color: #666; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .dl-link { background: #28a745; color: white; padding: 6px 12px; border-radius: 4px; text-decoration: none; font-size: 12px; }
+
+        #log { font-size: 11px; color: #999; margin-top: 10px; border-top: 1px solid #eee; padding-top: 10px; }
     </style>
 </head>
 <body>
 
 <div class="card">
-    <h2>图片批量下载</h2>
-    <span class="status-tag">注：文件将保存至系统 Download 文件夹</span>
-    
-    <textarea id="input" placeholder="请在此粘贴链接..."></textarea>
+    <h3 style="margin-top:0; text-align:center;">图片批量助手</h3>
+    <textarea id="input" placeholder="请在此粘贴图片链接..."></textarea>
 
     <div class="btn-group">
-        <button class="btn-clear" onclick="clearAll()">清空</button>
-        <button class="btn-preview" onclick="renderPreview()">生成预览</button>
-        <button class="btn-download" id="dl-btn" onclick="startTask()">开始下载</button>
+        <button class="btn-preview" onclick="processLinks()">解析并预览</button>
+        <button class="btn-download" onclick="batchDownload()">一键尝试下载</button>
     </div>
 
-    <div id="preview-grid"></div>
+    <div id="result-list"></div>
     <div id="log"></div>
 </div>
 
 <script>
     const input = document.getElementById('input');
+    const resultList = document.getElementById('result-list');
     const logArea = document.getElementById('log');
 
     function log(msg) {
-        const d = new Date();
-        const time = `${d.getHours()}:${d.getMinutes()}:${d.getSeconds()}`;
-        logArea.insertAdjacentHTML('afterbegin', `<div>[${time}] ${msg}</div>`);
+        logArea.innerHTML = `> ${msg}<br>` + logArea.innerHTML;
     }
 
-    function clearAll() {
-        input.value = '';
-        document.getElementById('preview-grid').innerHTML = '';
-        logArea.innerHTML = '已清空';
-    }
-
-    function renderPreview() {
-        const grid = document.getElementById('preview-grid');
-        grid.innerHTML = '';
+    // 解析链接并展示
+    function processLinks() {
+        resultList.innerHTML = '';
         const urls = input.value.split('\n').filter(u => u.trim().length > 10);
         
-        urls.forEach(url => {
-            const img = document.createElement('img');
-            img.className = 'p-item';
-            img.referrerPolicy = "no-referrer";
-            img.src = url.trim();
-            img.onclick = () => window.open(url, '_blank'); // 点击可直接打开原图
-            grid.appendChild(img);
+        if (urls.length === 0) return alert('请输入有效链接');
+
+        urls.forEach((url, index) => {
+            const cleanUrl = url.trim();
+            const fileName = `IMG_${Date.now()}_${index}.jpg`;
+            
+            const html = `
+                <div class="item">
+                    <img src="${cleanUrl}" referrerpolicy="no-referrer" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2260%22 height=%2260%22><rect width=%2260%22 height=%2260%22 fill=%22%23eee%22/><text x=%2250%%22 y=%2250%%22 dominant-baseline=%22middle%22 text-anchor=%22middle%22 font-size=%2210%22 fill=%22%23999%22>预览受限</text></svg>'">
+                    <div class="item-info">
+                        <div>图片 ${index + 1}</div>
+                        <div style="font-size:10px;">${cleanUrl.substring(0, 30)}...</div>
+                    </div>
+                    <a href="${cleanUrl}" download="${fileName}" target="_blank" rel="noreferrer" class="dl-link">下载</a>
+                </div>
+            `;
+            resultList.insertAdjacentHTML('beforeend', html);
         });
-        log(`已尝试加载 ${urls.length} 个预览`);
+        log(`已解析 ${urls.length} 条链接`);
     }
 
-    // 终极下载逻辑
-    async function forceDownload(url) {
-        const fileName = `AI_IMG_${Date.now()}_${Math.floor(Math.random()*1000)}.jpg`;
-        
-        try {
-            // 尝试 A: 跨域获取
-            const response = await fetch(url, { method: 'GET', mode: 'cors' });
-            if (response.ok) {
-                const blob = await response.blob();
-                const link = document.createElement('a');
-                link.href = URL.createObjectURL(blob);
-                link.download = fileName;
-                link.click();
-                log(`✅ 成功获取: ${fileName}`);
-                return;
-            }
-        } catch (e) {
-            // 尝试 B: 直接通过浏览器下载链接 (针对 Google 签名链接最有效)
-            log(`⚠️ 跨域受限，尝试唤起系统下载...`);
-            const a = document.createElement('a');
-            a.href = url;
-            a.target = '_blank'; // 安卓上通常会触发下载或预览
-            a.rel = 'noreferrer';
-            a.download = fileName; 
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
+    // 执行批量下载
+    async function batchDownload() {
+        const links = document.querySelectorAll('.dl-link');
+        if (links.length === 0) return alert('请先点击“解析并预览”');
+
+        log(`开始尝试批量触发...`);
+        for (let i = 0; i < links.length; i++) {
+            // 模拟点击
+            links[i].click();
+            log(`已触发第 ${i+1} 张图片下载请求`);
+            // 延迟防止浏览器拦截弹窗
+            await new Promise(r => setTimeout(r, 1200));
         }
-    }
-
-    async function startTask() {
-        const urls = input.value.split('\n').filter(u => u.trim().length > 10);
-        if (urls.length === 0) return alert('请先输入链接');
-
-        const btn = document.getElementById('dl-btn');
-        btn.disabled = true;
-        btn.textContent = '处理中...';
-
-        for (let i = 0; i < urls.length; i++) {
-            log(`正在处理第 ${i+1}/${urls.length} 张...`);
-            await forceDownload(urls[i].trim());
-            // 间隔 1 秒，防止请求过快被 Google 封锁
-            await new Promise(r => setTimeout(r, 1000));
-        }
-
-        btn.disabled = false;
-        btn.textContent = '开始下载';
-        log('🎉 任务执行完毕，请查看通知栏或 Download 文件夹');
+        alert('触发完毕！\n1. 请检查通知栏是否有下载进度。\n2. 若弹出“允许下载多个文件”，请点允许。\n3. 若图片是在新页面打开的，请长按图片选择“保存图片”。');
     }
 </script>
 
