@@ -2,536 +2,250 @@
 <html lang="zh">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>图片批量下载（自动判断版）</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>图片下载器</title>
+
 <style>
-  * { box-sizing: border-box; }
+* { box-sizing: border-box; }
 
-  html, body {
-    margin: 0;
-    padding: 0;
-    width: 100%;
-    overflow-x: hidden;
-    background: #fff;
-    font-family: sans-serif;
-  }
+body {
+  margin: 0;
+  padding: 12px;
+  font-family: sans-serif;
+}
 
-  body {
-    padding: 12px;
-  }
+textarea {
+  width: 100%;
+  min-height: 140px;
+  padding: 12px;
+  border-radius: 10px;
+}
 
-  .app {
-    width: 100%;
-    max-width: 900px;
-    margin: 0 auto;
-  }
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0;
+}
 
-  h3 {
-    margin: 0 0 12px;
-    font-size: 22px;
-    line-height: 1.3;
-  }
+button {
+  padding: 10px;
+  border-radius: 8px;
+}
 
-  textarea {
-    width: 100%;
-    min-height: 150px;
-    resize: vertical;
-    font-size: 14px;
-    line-height: 1.5;
-    padding: 12px;
-    border: 1px solid #bbb;
-    border-radius: 10px;
-    outline: none;
-    background: #fff;
-  }
+.item {
+  border: 1px solid #ddd;
+  border-radius: 10px;
+  margin: 10px 0;
+  padding: 10px;
+}
 
-  .toolbar {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    margin: 12px 0 14px;
-    align-items: center;
-  }
+img {
+  width: 100%;
+  max-height: 60vh;
+  object-fit: contain;
+  background: #eee;
+}
 
-  .toggle {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 14px;
-    color: #333;
-    user-select: none;
-  }
+.actions {
+  display: flex;
+  gap: 8px;
+  margin: 6px 0;
+}
 
-  button {
-    appearance: none;
-    border: 1px solid #888;
-    border-radius: 10px;
-    background: #f5f5f5;
-    padding: 12px 14px;
-    font-size: 16px;
-    line-height: 1;
-    cursor: pointer;
-  }
+#viewer {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.95);
+  display: none;
+  justify-content: center;
+  align-items: center;
+}
 
-  button.primary {
-    border-color: #2f6fed;
-    background: #eaf1ff;
-  }
-
-  button:active {
-    transform: scale(0.99);
-  }
-
-  .hint {
-    margin: 8px 0 14px;
-    font-size: 12px;
-    color: #666;
-    line-height: 1.5;
-  }
-
-  #list {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 14px;
-  }
-
-  .item {
-    border: 1px solid #e5e5e5;
-    border-radius: 14px;
-    padding: 12px;
-    background: #fff;
-    overflow: hidden;
-  }
-
-  .top {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-  }
-
-  .left {
-    min-width: 0;
-  }
-
-  .status {
-    font-size: 13px;
-    line-height: 1.5;
-    color: #666;
-    word-break: break-all;
-    overflow-wrap: anywhere;
-  }
-
-  .status.ok { color: #0a7a28; }
-  .status.warn { color: #b26a00; }
-  .status.fail { color: #c0392b; }
-
-  .meta {
-    margin-top: 6px;
-    font-size: 12px;
-    color: #777;
-    line-height: 1.4;
-    word-break: break-all;
-    overflow-wrap: anywhere;
-  }
-
-  .actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-
-  .actions button {
-    padding: 10px 12px;
-    font-size: 14px;
-  }
-
-  .preview-wrap {
-    margin-top: 12px;
-    width: 100%;
-    border-radius: 12px;
-    overflow: hidden;
-    background: #f3f3f3;
-    border: 1px solid #ededed;
-  }
-
-  .preview-img {
-    display: block;
-    width: 100%;
-    max-width: 100%;
-    height: auto;
-    max-height: 72vh;
-    object-fit: contain;
-    background: #f3f3f3;
-    cursor: pointer;
-  }
-
-  .empty {
-    color: #666;
-    font-size: 13px;
-    padding: 12px;
-  }
-
-  #log {
-    margin-top: 14px;
-    font-size: 13px;
-    line-height: 1.5;
-    color: #444;
-    word-break: break-all;
-    overflow-wrap: anywhere;
-  }
-
-  /* 全屏查看器 */
-  #viewer {
-    position: fixed;
-    inset: 0;
-    display: none;
-    align-items: center;
-    justify-content: center;
-    background: rgba(0, 0, 0, 0.95);
-    z-index: 9999;
-    padding: 12px;
-  }
-
-  #viewerImg {
-    max-width: 100%;
-    max-height: 100%;
-    object-fit: contain;
-    user-select: none;
-    -webkit-user-drag: none;
-  }
-
-  #viewerClose {
-    position: fixed;
-    top: calc(12px + env(safe-area-inset-top, 0px));
-    right: calc(12px + env(safe-area-inset-right, 0px));
-    z-index: 10000;
-    border: none;
-    background: rgba(255,255,255,0.15);
-    color: #fff;
-    font-size: 22px;
-    width: 44px;
-    height: 44px;
-    border-radius: 999px;
-    line-height: 44px;
-    text-align: center;
-  }
-
-  @media (min-width: 720px) {
-    body { padding: 16px; }
-
-    .item { padding: 14px; }
-
-    .top {
-      flex-direction: row;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: 16px;
-    }
-
-    .actions {
-      justify-content: flex-end;
-      flex: 0 0 auto;
-    }
-  }
+#viewer img {
+  max-width: 100%;
+  max-height: 100%;
+}
 </style>
 </head>
+
 <body>
-  <div class="app">
-    <h3>图片批量下载（自动判断版）</h3>
 
-    <textarea id="input" placeholder="每行一个图片链接，或直接粘贴一整段文本"></textarea>
+<div id="mainPage">
+  <textarea id="input" placeholder="每行一个图片链接"></textarea>
 
-    <div class="toolbar">
-      <button id="previewBtn">解析预览</button>
-      <button id="downloadAllBtn">全部下载</button>
-      <label class="toggle">
-        <input type="checkbox" id="autoMode" checked />
-        自动判断模式
-      </label>
-    </div>
-
-    <div class="hint">
-      说明：不会对链接做解码或改写，避免签名 URL 失效。自动判断会优先识别签名/临时链接，并把主操作切换为“打开原图”。
-    </div>
-
-    <div id="list"></div>
-    <div id="log"></div>
+  <div class="toolbar">
+    <button onclick="preview()">解析预览</button>
+    <button onclick="downloadAll()">全部下载</button>
+    <button onclick="clearAll()">清除</button>
+    <button onclick="showHistory()">历史解析</button>
   </div>
 
-  <div id="viewer" aria-hidden="true">
-    <button id="viewerClose" title="关闭">×</button>
-    <img id="viewerImg" alt="全屏预览" />
+  <div id="list"></div>
+</div>
+
+<div id="historyPage" style="display:none;">
+  <div class="toolbar">
+    <button onclick="back()">返回</button>
+    <button onclick="clearHistory()">清空历史</button>
   </div>
+  <div id="historyList"></div>
+</div>
+
+<div id="viewer" onclick="closeViewer()">
+  <img id="viewerImg">
+</div>
 
 <script>
 const input = document.getElementById('input');
 const list = document.getElementById('list');
-const logArea = document.getElementById('log');
-const previewBtn = document.getElementById('previewBtn');
-const downloadAllBtn = document.getElementById('downloadAllBtn');
-const autoMode = document.getElementById('autoMode');
-
 const viewer = document.getElementById('viewer');
 const viewerImg = document.getElementById('viewerImg');
-const viewerClose = document.getElementById('viewerClose');
 
-function log(msg, cls = '') {
-  const line = document.createElement('div');
-  if (cls) line.className = cls;
-  line.textContent = msg;
-  logArea.prepend(line);
+function extractUrls(text) {
+  return (text.match(/https?:\/\/[^\s]+/g) || []);
 }
 
-function sleep(ms) {
-  return new Promise(r => setTimeout(r, ms));
-}
-
-function extractUrls(rawText) {
-  const text = (rawText || '').replace(/\r/g, '\n');
-  const matches = text.match(/https?:\/\/[^\s<>"'`]+/g);
-  if (!matches) return [];
-
-  const seen = new Set();
-  const urls = [];
-  for (let u of matches) {
-    u = u.replace(/[),.;]+$/g, '');
-    if (!seen.has(u)) {
-      seen.add(u);
-      urls.push(u);
-    }
-  }
-  return urls;
-}
-
-function classifyUrl(url) {
-  const lower = url.toLowerCase();
-
-  const signedPatterns = [
-    'x-goog-signature=',
-    'x-goog-credential=',
-    'x-goog-algorithm=',
-    'x-goog-date=',
-    'x-goog-expires=',
-    'googleaccessid=',
-    'signature=',
-    'x-amz-signature=',
-    'x-amz-credential=',
-    'x-amz-algorithm=',
-    'x-amz-date=',
-    'policy=',
-    'expires='
-  ];
-
-  const isSigned = signedPatterns.some(p => lower.includes(p));
-  const hasImageExt = /\.(jpg|jpeg|png|gif|webp|bmp|svg)(?=$|\?)/i.test(url);
-
-  let label = '未知链接';
-  if (isSigned) label = '签名/临时链接';
-  else if (hasImageExt) label = '普通图片链接';
-  else label = '可能需要手动打开';
-
-  return {
-    signed: isSigned,
-    hasImageExt,
-    label,
-    primary: isSigned ? 'open' : 'download'
-  };
-}
-
-function makeFilename(url, index) {
-  let ext = 'jpg';
-  try {
-    const path = new URL(url).pathname.toLowerCase();
-    if (path.endsWith('.png')) ext = 'png';
-    else if (path.endsWith('.gif')) ext = 'gif';
-    else if (path.endsWith('.webp')) ext = 'webp';
-    else if (path.endsWith('.jpeg')) ext = 'jpg';
-    else if (path.endsWith('.jpg')) ext = 'jpg';
-    else if (path.endsWith('.bmp')) ext = 'bmp';
-    else if (path.endsWith('.svg')) ext = 'svg';
-  } catch {}
-  const n = String(index + 1).padStart(3, '0');
-  return `img_${n}.${ext}`;
-}
-
-function openImage(url) {
-  window.open(url, '_blank', 'noopener,noreferrer');
-}
-
-function downloadImage(url, name) {
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = name;
-  a.target = '_blank';
-  a.rel = 'noopener noreferrer';
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
+function isSigned(url) {
+  return url.includes("signature") || url.includes("x-goog");
 }
 
 function openViewer(url) {
   viewerImg.src = url;
   viewer.style.display = 'flex';
-  viewer.setAttribute('aria-hidden', 'false');
-  history.pushState({ viewer: true }, '', location.href);
 }
 
 function closeViewer() {
   viewer.style.display = 'none';
-  viewer.setAttribute('aria-hidden', 'true');
-  viewerImg.src = '';
 }
 
-viewerClose.addEventListener('click', closeViewer);
-viewer.addEventListener('click', (e) => {
-  if (e.target === viewer) closeViewer();
-});
+function view(url, ok) {
+  if (ok) openViewer(url);
+  else window.open(url);
+}
 
-viewerImg.addEventListener('click', (e) => {
-  e.stopPropagation();
-  closeViewer();
-});
+function download(url, name) {
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  a.target = "_blank";
+  a.click();
+}
 
-window.addEventListener('popstate', () => {
-  if (viewer.style.display === 'flex') {
-    closeViewer();
-  }
-});
-
-function renderList(urls) {
-  list.innerHTML = '';
-
-  if (!urls.length) {
-    const empty = document.createElement('div');
-    empty.className = 'empty';
-    empty.textContent = '没有识别到有效图片链接。';
-    list.appendChild(empty);
-    log('没有识别到有效链接', 'warn');
-    return;
-  }
-
-  urls.forEach((url, i) => {
-    const item = document.createElement('div');
-    item.className = 'item';
-
-    const top = document.createElement('div');
-    top.className = 'top';
-
-    const left = document.createElement('div');
-    left.className = 'left';
-
-    const status = document.createElement('div');
-    status.className = 'status';
-    const meta = classifyUrl(url);
-    status.textContent = autoMode.checked
-      ? `自动判断：${meta.label}`
-      : '手动模式：不自动切换主操作';
-
-    const urlText = document.createElement('div');
-    urlText.className = 'meta';
-    urlText.textContent = url;
-
-    const actions = document.createElement('div');
-    actions.className = 'actions';
-
-    const openBtn = document.createElement('button');
-    openBtn.textContent = '打开原图';
-    openBtn.onclick = () => openImage(url);
-
-    const dlBtn = document.createElement('button');
-    dlBtn.textContent = '下载';
-    dlBtn.onclick = () => {
-      const name = makeFilename(url, i);
-      downloadImage(url, name);
-      log(`已触发下载：${name}`, 'ok');
-    };
-
-    const viewBtn = document.createElement('button');
-    viewBtn.textContent = '全屏查看';
-    viewBtn.onclick = () => openViewer(url);
-
-    if (autoMode.checked) {
-      if (meta.primary === 'open') {
-        openBtn.classList.add('primary');
-      } else {
-        dlBtn.classList.add('primary');
-      }
-    }
-
-    actions.appendChild(openBtn);
-    actions.appendChild(dlBtn);
-    actions.appendChild(viewBtn);
-
-    left.appendChild(status);
-    left.appendChild(urlText);
-
-    top.appendChild(left);
-    top.appendChild(actions);
-
-    const previewWrap = document.createElement('div');
-    previewWrap.className = 'preview-wrap';
-
-    const img = document.createElement('img');
-    img.className = 'preview-img';
-    img.loading = 'lazy';
-    img.referrerPolicy = 'no-referrer';
-    img.alt = `图片 ${i + 1}`;
-    img.title = '点击全屏查看';
-
-    img.onload = () => {
-      status.textContent = `预览成功 · ${autoMode.checked ? meta.label : '已加载'}`;
-      status.className = 'status ok';
-    };
-
-    img.onerror = () => {
-      status.textContent = '预览失败，可点击“打开原图”';
-      status.className = 'status warn';
-      previewWrap.innerHTML = '<div class="empty">预览失败</div>';
-    };
-
-    img.onclick = () => openViewer(url);
-
-    img.src = url;
-    previewWrap.appendChild(img);
-
-    item.appendChild(top);
-    item.appendChild(previewWrap);
-    list.appendChild(item);
-  });
-
-  log(`已识别 ${urls.length} 个链接`, 'ok');
+function saveHistory(urls) {
+  const old = JSON.parse(localStorage.getItem("img_history") || "[]");
+  const merged = [...urls, ...old];
+  localStorage.setItem("img_history", JSON.stringify(merged.slice(0, 200)));
 }
 
 function preview() {
+  list.innerHTML = '';
   const urls = extractUrls(input.value);
-  renderList(urls);
+
+  if (urls.length) saveHistory(urls);
+
+  urls.forEach((url, i) => {
+    const item = createItem(url, i);
+    list.appendChild(item);
+  });
+}
+
+function createItem(url, i, isHistory=false) {
+  const item = document.createElement('div');
+  item.className = 'item';
+
+  const status = document.createElement('div');
+  status.textContent = '加载中...';
+
+  const actions = document.createElement('div');
+  actions.className = 'actions';
+
+  const viewBtn = document.createElement('button');
+  viewBtn.textContent = '查看';
+
+  const dlBtn = document.createElement('button');
+  dlBtn.textContent = '下载';
+
+  const delBtn = document.createElement('button');
+  delBtn.textContent = '删除';
+
+  const img = document.createElement('img');
+
+  let ok = true;
+
+  img.onload = () => status.textContent = '预览成功';
+  img.onerror = () => {
+    status.textContent = '无法预览';
+    ok = false;
+  };
+
+  img.src = url;
+
+  viewBtn.onclick = () => view(url, ok);
+  dlBtn.onclick = () => download(url, `img_${i}.jpg`);
+
+  actions.appendChild(viewBtn);
+  actions.appendChild(dlBtn);
+
+  if (isHistory) {
+    delBtn.onclick = () => deleteHistory(url);
+    actions.appendChild(delBtn);
+  }
+
+  item.appendChild(status);
+  item.appendChild(actions);
+  item.appendChild(img);
+
+  return item;
 }
 
 async function downloadAll() {
   const urls = extractUrls(input.value);
-  if (!urls.length) {
-    log('没有可下载的链接', 'warn');
-    return;
-  }
 
   for (let i = 0; i < urls.length; i++) {
-    const meta = classifyUrl(urls[i]);
-    const name = makeFilename(urls[i], i);
-
-    if (autoMode.checked && meta.signed) {
-      openImage(urls[i]);
-      log(`签名链接已改为打开原图：${name}`, 'warn');
-    } else {
-      downloadImage(urls[i], name);
-      log(`已触发：${name}`, 'ok');
-    }
-
-    await sleep(900);
+    if (isSigned(urls[i])) window.open(urls[i]);
+    else download(urls[i], `img_${i}.jpg`);
+    await new Promise(r => setTimeout(r, 800));
   }
 }
 
-previewBtn.addEventListener('click', preview);
-downloadAllBtn.addEventListener('click', downloadAll);
+function clearAll() {
+  input.value = '';
+  list.innerHTML = '';
+}
+
+/* ===== 历史功能 ===== */
+
+function showHistory() {
+  document.getElementById('mainPage').style.display = 'none';
+  document.getElementById('historyPage').style.display = 'block';
+
+  const data = JSON.parse(localStorage.getItem("img_history") || "[]");
+  const historyList = document.getElementById('historyList');
+  historyList.innerHTML = '';
+
+  data.forEach((url, i) => {
+    historyList.appendChild(createItem(url, i, true));
+  });
+}
+
+function back() {
+  document.getElementById('mainPage').style.display = 'block';
+  document.getElementById('historyPage').style.display = 'none';
+}
+
+function clearHistory() {
+  localStorage.removeItem("img_history");
+  showHistory();
+}
+
+function deleteHistory(url) {
+  let data = JSON.parse(localStorage.getItem("img_history") || "[]");
+  data = data.filter(u => u !== url);
+  localStorage.setItem("img_history", JSON.stringify(data));
+  showHistory();
+}
 </script>
+
 </body>
 </html>
