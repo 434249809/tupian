@@ -1,96 +1,143 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="referrer" content="no-referrer">
-    <title>图片助手 v4</title>
-    <style>
-        :root { --primary: #4a90e2; --bg: #f5f7fa; }
-        body { font-family: sans-serif; background: var(--bg); margin: 0; padding: 15px; display: flex; justify-content: center; }
-        .card { background: white; width: 100%; max-width: 500px; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
-        textarea { width: 100%; height: 100px; border: 1px solid #ddd; border-radius: 8px; padding: 10px; box-sizing: border-box; font-size: 13px; }
-        .btn-group { display: grid; grid-template-columns: 1fr 1.5fr; gap: 10px; margin: 15px 0; }
-        button { padding: 12px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; color: white; }
-        .btn-preview { background: #67809f; }
-        .btn-download { background: var(--primary); }
-        
-        /* 预览与手动下载列表 */
-        #result-list { margin-top: 15px; }
-        .item { display: flex; align-items: center; background: #f8f9fa; padding: 10px; border-radius: 8px; margin-bottom: 8px; border: 1px solid #eee; }
-        .item img { width: 60px; height: 60px; object-fit: cover; border-radius: 4px; margin-right: 12px; background: #ddd; }
-        .item-info { flex: 1; overflow: hidden; }
-        .item-info div { font-size: 12px; color: #666; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .dl-link { background: #28a745; color: white; padding: 6px 12px; border-radius: 4px; text-decoration: none; font-size: 12px; }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>图片下载器（移动优化版）</title>
 
-        #log { font-size: 11px; color: #999; margin-top: 10px; border-top: 1px solid #eee; padding-top: 10px; }
-    </style>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+
+<style>
+body { font-family: sans-serif; padding: 10px; }
+textarea { width: 100%; height: 120px; font-size: 14px; }
+button { margin: 5px; padding: 10px; font-size: 16px; }
+.item { display: flex; align-items: center; margin: 10px 0; }
+img { width: 70px; height: 70px; object-fit: cover; background: #eee; }
+.status { font-size: 12px; color: #666; margin-left: 10px; }
+</style>
 </head>
 <body>
 
-<div class="card">
-    <h3 style="margin-top:0; text-align:center;">图片批量助手</h3>
-    <textarea id="input" placeholder="请在此粘贴图片链接..."></textarea>
+<h3>📥 图片批量下载（移动优化）</h3>
 
-    <div class="btn-group">
-        <button class="btn-preview" onclick="processLinks()">解析并预览</button>
-        <button class="btn-download" onclick="batchDownload()">一键尝试下载</button>
-    </div>
+<textarea id="input" placeholder="每行一个图片链接"></textarea><br>
 
-    <div id="result-list"></div>
-    <div id="log"></div>
-</div>
+<button onclick="preview()">解析预览</button>
+<button onclick="downloadZip()">打包下载ZIP</button>
+
+<div id="list"></div>
+<div id="log"></div>
 
 <script>
-    const input = document.getElementById('input');
-    const resultList = document.getElementById('result-list');
-    const logArea = document.getElementById('log');
+const input = document.getElementById('input');
+const list = document.getElementById('list');
+const logArea = document.getElementById('log');
 
-    function log(msg) {
-        logArea.innerHTML = `> ${msg}<br>` + logArea.innerHTML;
+function log(msg) {
+  logArea.innerHTML = msg + "<br>" + logArea.innerHTML;
+}
+
+function getExt(type, url) {
+  if (type.includes('png')) return 'png';
+  if (type.includes('gif')) return 'gif';
+  if (type.includes('webp')) return 'webp';
+  if (type.includes('jpeg')) return 'jpg';
+
+  if (url.endsWith('.png')) return 'png';
+  if (url.endsWith('.gif')) return 'gif';
+  if (url.endsWith('.webp')) return 'webp';
+
+  return 'jpg';
+}
+
+async function fetchImage(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error();
+  return await res.blob();
+}
+
+// 限制并发
+async function pool(limit, tasks) {
+  const ret = [];
+  const executing = [];
+
+  for (const task of tasks) {
+    const p = task().then(res => {
+      executing.splice(executing.indexOf(p), 1);
+      return res;
+    });
+    ret.push(p);
+    executing.push(p);
+
+    if (executing.length >= limit) {
+      await Promise.race(executing);
     }
+  }
 
-    // 解析链接并展示
-    function processLinks() {
-        resultList.innerHTML = '';
-        const urls = input.value.split('\n').filter(u => u.trim().length > 10);
-        
-        if (urls.length === 0) return alert('请输入有效链接');
+  return Promise.all(ret);
+}
 
-        urls.forEach((url, index) => {
-            const cleanUrl = url.trim();
-            const fileName = `IMG_${Date.now()}_${index}.jpg`;
-            
-            const html = `
-                <div class="item">
-                    <img src="${cleanUrl}" referrerpolicy="no-referrer" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2260%22 height=%2260%22><rect width=%2260%22 height=%2260%22 fill=%22%23eee%22/><text x=%2250%%22 y=%2250%%22 dominant-baseline=%22middle%22 text-anchor=%22middle%22 font-size=%2210%22 fill=%22%23999%22>预览受限</text></svg>'">
-                    <div class="item-info">
-                        <div>图片 ${index + 1}</div>
-                        <div style="font-size:10px;">${cleanUrl.substring(0, 30)}...</div>
-                    </div>
-                    <a href="${cleanUrl}" download="${fileName}" target="_blank" rel="noreferrer" class="dl-link">下载</a>
-                </div>
-            `;
-            resultList.insertAdjacentHTML('beforeend', html);
-        });
-        log(`已解析 ${urls.length} 条链接`);
+async function preview() {
+  list.innerHTML = '';
+
+  const urls = input.value.split('\n').map(x => x.trim()).filter(Boolean);
+
+  urls.forEach(url => {
+    const div = document.createElement('div');
+    div.className = 'item';
+
+    const img = document.createElement('img');
+    const status = document.createElement('div');
+    status.className = 'status';
+    status.textContent = '加载中...';
+
+    div.appendChild(img);
+    div.appendChild(status);
+    list.appendChild(div);
+
+    fetchImage(url)
+      .then(blob => {
+        const u = URL.createObjectURL(blob);
+        img.src = u;
+        status.textContent = '✔ 成功';
+
+        setTimeout(() => URL.revokeObjectURL(u), 5000);
+      })
+      .catch(() => {
+        status.textContent = '❌ 失败';
+      });
+  });
+}
+
+async function downloadZip() {
+  const urls = input.value.split('\n').map(x => x.trim()).filter(Boolean);
+
+  const zip = new JSZip();
+
+  const tasks = urls.map((url, i) => async () => {
+    try {
+      const blob = await fetchImage(url);
+      const ext = getExt(blob.type, url);
+      zip.file(`img_${i}.${ext}`, blob);
+      log(`✔ ${i}`);
+    } catch {
+      log(`❌ 失败: ${url}`);
     }
+  });
 
-    // 执行批量下载
-    async function batchDownload() {
-        const links = document.querySelectorAll('.dl-link');
-        if (links.length === 0) return alert('请先点击“解析并预览”');
+  await pool(3, tasks); // 并发3个
 
-        log(`开始尝试批量触发...`);
-        for (let i = 0; i < links.length; i++) {
-            // 模拟点击
-            links[i].click();
-            log(`已触发第 ${i+1} 张图片下载请求`);
-            // 延迟防止浏览器拦截弹窗
-            await new Promise(r => setTimeout(r, 1200));
-        }
-        alert('触发完毕！\n1. 请检查通知栏是否有下载进度。\n2. 若弹出“允许下载多个文件”，请点允许。\n3. 若图片是在新页面打开的，请长按图片选择“保存图片”。');
-    }
+  const content = await zip.generateAsync({ type: "blob" });
+
+  const a = document.createElement('a');
+  const url = URL.createObjectURL(content);
+
+  a.href = url;
+  a.download = "images.zip";
+  a.click();
+
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
 </script>
 
 </body>
